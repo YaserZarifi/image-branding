@@ -10,10 +10,11 @@ from typing import Callable, Optional
 from PIL import Image, UnidentifiedImageError
 
 from core.models import BrandingConfig, ImageResult, BatchResult
-from core.processor import process_image
+from core.processor import process_image, load_image, RAW_EXTENSIONS
 
 
-SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp",
+                         ".heic", ".heif"} | RAW_EXTENSIONS
 
 
 def _persian_error_message(exc: Exception, filename: str) -> str:
@@ -26,6 +27,8 @@ def _persian_error_message(exc: Exception, filename: str) -> str:
         return f"دسترسی لازم برای خواندن یا ذخیره «{filename}» وجود ندارد."
     if isinstance(exc, OSError) and "disk" in str(exc).lower():
         return f"فضای کافی روی دیسک برای ذخیره «{filename}» وجود ندارد."
+    if "raw" in type(exc).__name__.lower() or "libraw" in type(exc).__name__.lower():
+        return f"فایل خام (RAW) «{filename}» قابل خواندن نیست یا خراب است."
     return f"خطای غیرمنتظره در پردازش «{filename}»: {exc}"
 
 
@@ -62,7 +65,7 @@ def process_batch(
             progress_callback(index, len(images), source_path.name)
 
         try:
-            img = Image.open(source_path)
+            img = load_image(source_path)
             img.load()  # force-read now, so corrupt files fail here, not later
 
             result_img = process_image(img, config)

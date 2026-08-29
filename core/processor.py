@@ -1,5 +1,9 @@
 """Core image processing engine: gradient, logos, text, borders."""
 
+from pathlib import Path
+
+import rawpy
+import pillow_heif
 from PIL import Image, ImageDraw, ImageFont
 import arabic_reshaper
 from bidi.algorithm import get_display
@@ -16,6 +20,32 @@ def _hex_to_rgba(hex_color: str, alpha: int = 255) -> tuple:
     g = int(hex_color[2:4], 16)
     b = int(hex_color[4:6], 16)
     return (r, g, b, alpha)
+
+
+# Registering this lets Pillow's normal Image.open() understand HEIC/HEIF
+# files (iPhone photos) automatically, no special-casing needed for them.
+pillow_heif.register_heif_opener()
+
+RAW_EXTENSIONS = {
+    ".cr2", ".cr3", ".nef", ".arw", ".dng",
+    ".raf", ".rw2", ".orf", ".pef", ".srw",
+}
+
+
+def load_image(path) -> Image.Image:
+    """Open any supported image file, including camera RAW formats, and
+    return it as a standard Pillow image ready for the branding pipeline.
+
+    HEIC/HEIF (iPhone photos) are handled by Pillow itself once
+    pillow-heif has registered its opener above. Camera RAW formats
+    (Canon, Nikon, Sony, etc.) need rawpy/LibRaw to decode first.
+    """
+    suffix = Path(path).suffix.lower()
+    if suffix in RAW_EXTENSIONS:
+        with rawpy.imread(str(path)) as raw:
+            rgb_array = raw.postprocess()
+        return Image.fromarray(rgb_array)
+    return Image.open(path)
 
 
 def apply_gradient(image: Image.Image, config: GradientConfig) -> Image.Image:
@@ -57,7 +87,8 @@ def apply_gradient(image: Image.Image, config: GradientConfig) -> Image.Image:
     else:
         full_alpha.paste(gradient, (0, 0))
 
-    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 255))
+    overlay_rgb = _hex_to_rgba(config.color)[:3]
+    overlay = Image.new("RGBA", (width, height), overlay_rgb + (255,))
     overlay.putalpha(full_alpha)
 
     result = Image.alpha_composite(base, overlay)
@@ -240,19 +271,22 @@ def apply_border(image: Image.Image, config: BorderConfig,
     color_hex = config.custom_params.get("color", config.line_color)
     color_rgb = _hex_to_rgba(color_hex)[:3]
 
+    edge_margin = max(0, int(width * config.margin_ratio))
+
     if config.preset_name == "thin_line":
         draw_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(draw_layer)
         half = thickness / 2
         draw.rectangle(
-            [half, half, width - 1 - half, height - 1 - half],
+            [edge_margin + half, edge_margin + half,
+             width - 1 - edge_margin - half, height - 1 - edge_margin - half],
             outline=color_rgb + (255,),
             width=thickness,
         )
         return Image.alpha_composite(base, draw_layer)
 
     if config.preset_name in ("fade_corners", "fade_text_gap", "custom"):
-        margin = max(thickness, int(width * 0.02))
+        margin = max(thickness, edge_margin)
         top_length = width - 2 * margin
         side_length = height - 2 * margin
 

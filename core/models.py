@@ -27,8 +27,9 @@ class GradientConfig:
     enabled: bool = True
     anchor: GradientAnchor = GradientAnchor.BOTTOM
     height_ratio: float = 0.35       # 0.0-1.0, portion of image height covered
-    intensity: float = 0.7           # 0.0-1.0, max opacity of the gradient (black)
+    intensity: float = 0.7           # 0.0-1.0, max opacity of the gradient
     curve_power: float = 0.5         # <1.0 = darkens faster/stronger, 1.0 = linear
+    color: str = "#000000"           # gradient overlay color as hex
 
 
 @dataclass
@@ -54,6 +55,7 @@ class BorderConfig:
     preset_name: str = "none"        # "none", "thin_line", "gradient_logo", "custom"
     line_color: str = "#FFFFFF"
     line_thickness: int = 2
+    margin_ratio: float = 0.02       # gap from image edges, as a ratio of width
     custom_params: dict = field(default_factory=dict)
 
 
